@@ -1,0 +1,41 @@
+name: Persist Training Summary
+
+on:
+  workflow_run:
+    workflows: ["Train Swing-up PPO"]
+    types: [completed]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  persist:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+      - name: Download training artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          mkdir -p downloaded
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --dir downloaded
+          META="$(find downloaded -name metadata.json -print -quit)"
+          DIR="$(dirname "$META")"
+          TARGET="training-results/run-${{ github.event.workflow_run.run_number }}"
+          mkdir -p "$TARGET"
+          cp "$DIR/summary.md" "$DIR/metrics.csv" "$DIR/metadata.json" "$TARGET/"
+          printf '# Training run %s\n\n- conclusion: success\n- workflow run id: %s\n- run URL: https://github.com/%s/actions/runs/%s\n' "${{ github.event.workflow_run.run_number }}" "$RUN_ID" "$GITHUB_REPOSITORY" "$RUN_ID" > "$TARGET/run-info.md"
+      - name: Commit summary files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add training-results
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Publish swing-up training result for run #${{ github.event.workflow_run.run_number }} [skip ci]"
+          git pull --rebase origin main
+          git push origin HEAD:main

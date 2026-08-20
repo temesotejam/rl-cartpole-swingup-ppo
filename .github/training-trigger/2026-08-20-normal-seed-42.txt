@@ -1,0 +1,4 @@
+Training request
+preset: normal
+seed: 42
+reason: first full curriculum Cart-Pole swing-up PPO run
